@@ -16,5 +16,5 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. The applica
 
 ```bash
 npm run build
-npm start
-```
+
+authentication with help of supabase
