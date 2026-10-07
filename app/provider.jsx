@@ -85,6 +85,20 @@ function Provider({ children }) {
 
 export default Provider
 
+export function DashboardProvider({ children }) {
+    const context = useContext(UserDetailContext)
+
+    if (!context) {
+        throw new Error('DashboardProvider must be used within a Provider')
+    }
+
+    return (
+        <UserDetailContext.Provider value={context}>
+            {children}
+        </UserDetailContext.Provider>
+    )
+}
+
 export const useUser = () => {
     const context = useContext(UserDetailContext)
     if (!context) {
