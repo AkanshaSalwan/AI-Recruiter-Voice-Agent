@@ -8,4 +8,4 @@ function DashboardProvider({ children }) {
     )
 }
 
-export default DashboardProvider;
+export default DashboardProvider

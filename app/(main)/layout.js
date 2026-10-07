@@ -1,13 +1,16 @@
-import React from 'react'
-import { DashboardProvider } from '@/app/provider.jsx'
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "./_components/AppSidebar"
 
 function DashboardLayout({ children }) {
     return (
-        <div>
-            <DashboardProvider>
+        <SidebarProvider>
+            <AppSidebar />
+            <main>
+                <SidebarTrigger />
                 {children}
-            </DashboardProvider>
-        </div>
+            </main>
+        </SidebarProvider>
     )
 }
+
 export default DashboardLayout
