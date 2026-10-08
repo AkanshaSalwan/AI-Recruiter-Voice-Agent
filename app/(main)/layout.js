@@ -5,7 +5,7 @@ function DashboardLayout({ children }) {
     return (
         <SidebarProvider>
             <AppSidebar />
-            <main>
+            <main className="min-h-screen w-full bg-gray-100 p-5">
                 <SidebarTrigger />
                 {children}
             </main>

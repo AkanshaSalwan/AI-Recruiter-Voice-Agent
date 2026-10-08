@@ -25,7 +25,7 @@ function Provider({ children }) {
             try {
                 const { data: existingUser, error: lookupError } = await supabase
                     .from('Users')
-                    .select('id')
+                    .select('*')
                     .eq('email', authenticatedUser.email)
                     .maybeSingle()
 
@@ -33,20 +33,27 @@ function Provider({ children }) {
                     throw lookupError
                 }
                 if (existingUser) {
+                    setUser(existingUser)
                     return
                 }
 
-                const { error: insertError } = await supabase.from('Users').insert([
-                    {
-                        name: authenticatedUser.user_metadata?.name ?? authenticatedUser.user_metadata?.full_name,
-                        email: authenticatedUser.email,
-                        picture: authenticatedUser.user_metadata?.picture ?? authenticatedUser.user_metadata?.avatar_url,
-                    },
-                ])
+                const newUser = {
+                    name: authenticatedUser.user_metadata?.name ?? authenticatedUser.user_metadata?.full_name,
+                    email: authenticatedUser.email,
+                    picture: authenticatedUser.user_metadata?.picture ?? authenticatedUser.user_metadata?.avatar_url,
+                }
+
+                const { data: insertedUser, error: insertError } = await supabase
+                    .from('Users')
+                    .insert([newUser])
+                    .select()
+                    .single()
 
                 if (insertError) {
                     throw insertError
                 }
+
+                setUser(insertedUser ?? newUser)
             } catch (error) {
                 usersBeingCreated.delete(authenticatedUser.id)
                 throw error
@@ -54,7 +61,11 @@ function Provider({ children }) {
         }
 
         const handleUser = (authenticatedUser) => {
-            setUser(authenticatedUser)
+            if (!authenticatedUser) {
+                setUser(null)
+                return
+            }
+
             createNewUser(authenticatedUser).catch((error) => {
                 console.error('Unable to create the Supabase user record:', error)
             })
