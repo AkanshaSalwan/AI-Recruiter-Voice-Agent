@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Progress } from '@/components/ui/progress';
 import FormContainer from './_components/FormContainer';
 import QuestionList from './_components/QuestionList';
+import { toast } from '@/components/ui/toast';
 
 
 
@@ -27,13 +28,19 @@ function CreateInterview() {
     }
 
     const onGoToNextStep = () => {
-        if (formData?.length <= 3) 
-            {
-
-                return ;
-            }
-            setStep(step+1);
+        if (
+            !formData?.jobPosition ||
+            !formData?.jobDescription ||
+            !formData?.interviewDuration ||
+            !formData?.types?.length
+        ) {
+            toast.add({
+                title: "Please enter all the details",
+            })
+            return
         }
+        setStep(step + 1)
+    }
 //1.54.
 
         return (
@@ -47,7 +54,7 @@ function CreateInterview() {
                 {step == 1 ? <FormContainer onHandleInputChange={onHandleInputChange}
                     GoToNext={() => onGoToNextStep()}
                 />
-                    : step == 2 ? <QuestionList /> : null}
+                    : step == 2 ? <QuestionList formData={formData} /> : null}
 
             </div>
         )
