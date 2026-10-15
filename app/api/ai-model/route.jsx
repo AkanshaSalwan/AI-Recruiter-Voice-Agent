@@ -38,17 +38,25 @@ export async function POST(request) {
                 const completion = await openai.chat.completions.create({
                     model,
                     messages: [
+                        {
+                            role: "system",
+                            content: "Return only valid JSON. No markdown. Shape: {\"interviewQuestions\":[{\"question\":\"...\",\"type\":\"Technical\"}]}",
+                        },
                         { role: "user", content: FINAL_PROMPT },
                     ],
                 });
 
                 const message = completion.choices?.[0]?.message;
-                if (!message?.content) {
+                const content = Array.isArray(message?.content)
+                    ? message.content.map((part) => part?.text || "").join("\n")
+                    : message?.content;
+
+                if (!content) {
                     lastError = new Error("AI returned an empty response");
                     continue;
                 }
 
-                return NextResponse.json(message);
+                return NextResponse.json({ ...message, content });
             } catch (error) {
                 lastError = error;
                 const status = error?.status || error?.statusCode;

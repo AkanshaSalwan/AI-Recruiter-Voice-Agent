@@ -2,30 +2,85 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { toast } from '@/components/ui/toast';
-import { Loader2Icon } from 'lucide-react';
+import { Loader2, Loader2Icon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import QuestionListContainer from './QuestionListContainer';
+import { v4 as uuidv4 } from 'uuid';
+import { createClient } from '@/services/supabaseClient';
+import { useUser } from '@/app/provider';
+import { useRouter } from 'next/navigation';
 
 function QuestionList({ formData }) {
+  const supabase = createClient();
+  const { user } = useUser();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [saveLoading, setSaveLoading] = useState(false);
   const [questionList, setQuestionList] = useState([]);
 
   useEffect(() => {
     if (formData) {
       GenerateQuestionList();
+      //we can comment this line to avoid the api call when the formData is not changed
     }
   }, [formData])
 
-  const parseQuestions = (content) => {
-    const cleaned = content.replace(/```json/g, "").replace(/```/g, "").trim();
-    try {
-      const parsed = JSON.parse(cleaned);
-      return parsed.interviewQuestions || parsed;
-    } catch {
-      const match = cleaned.match(/\[[\s\S]*\]/);
-      if (match) {
-        return JSON.parse(match[0]);
-      }
+  const normalizeQuestions = (parsed) => {
+    const list = parsed?.interviewQuestions || parsed?.questions || parsed;
+    if (!Array.isArray(list) || list.length === 0) {
       throw new Error("Invalid AI response");
     }
+    return list.map((item) => (
+      typeof item === "string" ? { question: item } : item
+    ));
+  }
+
+  const parseQuestions = (content) => {
+    if (Array.isArray(content)) {
+      content = content.map((part) => part?.text || part).join("\n");
+    }
+    if (typeof content !== "string") {
+      content = JSON.stringify(content);
+    }
+
+    const cleaned = content
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .replace(/,\s*([}\]])/g, "$1")
+      .trim();
+
+    try {
+      return normalizeQuestions(JSON.parse(cleaned));
+    } catch {}
+
+    const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      try {
+        return normalizeQuestions(JSON.parse(objectMatch[0].replace(/,\s*([}\]])/g, "$1")));
+      } catch {}
+    }
+
+    const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      try {
+        return normalizeQuestions(JSON.parse(arrayMatch[0].replace(/,\s*([}\]])/g, "$1")));
+      } catch {}
+    }
+
+    const numbered = cleaned
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^\d+[\.\)]\s+/.test(line))
+      .map((line) => ({
+        question: line.replace(/^\d+[\.\)]\s+/, "").trim(),
+      }));
+
+    if (numbered.length > 0) {
+      return numbered;
+    }
+
+    console.log("AI content that failed to parse:", content);
+    throw new Error("Invalid AI response");
   }
 
   const GenerateQuestionList = async () => {
@@ -55,6 +110,42 @@ function QuestionList({ formData }) {
     }
   }
 
+  const onFinish = async () => {
+    setSaveLoading(true);
+    try {
+      const interview_id=uuidv4();
+      const { data, error } = await supabase
+        .from('interviews')
+        .insert([
+          {
+            jobPosition: formData.jobPosition,
+            jobDescription: formData.jobDescription,
+            duration: formData.interviewDuration,
+            type: Array.isArray(formData.types) ? formData.types.join(',') : formData.types,
+            questionList: questionList,
+            userEmail: user?.email,
+            interview_id: interview_id,
+          },
+        ])
+        .select();
+
+      console.log(data, error);
+
+      if (error) {
+        toast.add({
+          title: error.message,
+        });
+        return;
+      }
+
+      toast.add({
+        title: "Interview created successfully",
+      });
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
   return (
     <div>
       {loading &&
@@ -69,20 +160,13 @@ function QuestionList({ formData }) {
 
       {!loading && questionList?.length > 0 && (
         <div className='p-5 bg-white rounded-2xl'>
-          <h2 className='font-bold text-lg mb-4'>Generated Interview Questions</h2>
-          <div className='space-y-3'>
-            {questionList.map((item, index) => (
-              <div key={index} className='p-3 border border-gray-200 rounded-xl'>
-                <h2 className='font-medium'>{index + 1}. {item.question || item}</h2>
-                {item.type && (
-                  <span className='text-xs text-primary bg-blue-50 px-2 py-1 rounded-full mt-2 inline-block'>
-                    {item.type}
-                  </span>
-                )}
-              </div>
-            ))}
+          <QuestionListContainer questionList={questionList} />
+          <div className='flex justify-end mt-10'>
+            <Button onClick={() => onFinish()} disabled={saveLoading}>
+              {saveLoading && <Loader2 className='animate-spin' />}
+              Finish
+            </Button>
           </div>
-          
         </div>
       )}
     </div>

@@ -68,14 +68,9 @@ Adjust the number and depth of questions to match the interview duration.
 Ensure the questions match the tone and structure of a real-life {{type}} interview.
 
 🧩 Format your response in JSON format with array list of questions.
-format: interviewQuestions=[
-  {
-    question:"",
-    type:'Technical/Behavioral/Experience/Problem Solving/Leadership'
-  },{
-    ...
-  }
-]
+Return ONLY valid JSON, no extra text:
+{"interviewQuestions":[{"question":"Your question here","type":"Technical"}]}
+type must be one of: Technical, Behavioral, Experience, Problem Solving, Leadership
 
 🎯 The goal is to create a structured, relevant, and time-optimized interview plan for a {{jobTitle}} role.`;
 
