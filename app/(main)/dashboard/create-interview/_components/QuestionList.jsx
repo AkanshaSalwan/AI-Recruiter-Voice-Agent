@@ -5,12 +5,14 @@ import { toast } from '@/components/ui/toast';
 import { Loader2, Loader2Icon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import QuestionListContainer from './QuestionListContainer';
+import {supabase} from '@/services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@/services/supabaseClient';
 import { useUser } from '@/app/provider';
 import { useRouter } from 'next/navigation';
 
-function QuestionList({ formData }) {
+
+function QuestionList({ formData, onCreateLink }) {
   const supabase = createClient();
   const { user } = useUser();
   const router = useRouter();
@@ -143,6 +145,8 @@ function QuestionList({ formData }) {
       });
     } finally {
       setSaveLoading(false);
+
+      onCreateLink(interview_id);
     }
   }
 
@@ -164,7 +168,7 @@ function QuestionList({ formData }) {
           <div className='flex justify-end mt-10'>
             <Button onClick={() => onFinish()} disabled={saveLoading}>
               {saveLoading && <Loader2 className='animate-spin' />}
-              Finish
+              Create Interview Link & Finish
             </Button>
           </div>
         </div>
