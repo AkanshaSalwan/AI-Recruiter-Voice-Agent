@@ -10,10 +10,11 @@ import InterviewLink from './_components/InterviewLink';
 
 
 
+
 function CreateInterview() {
 
     const router = useRouter();
-    const [step, setStep] = useState(1);
+    const [step, setStep] = useState(3); //for testing purpose, set step to 3 to directly show the InterviewLink component````````
     const [formData, setFormData] = useState({})
     const [interview_id, setInterviewId] = useState();
     
@@ -57,11 +58,16 @@ function CreateInterview() {
 
                 </div>
                 <Progress value={step * 33.33} className="my-5 [&_[data-slot=progress-track]]:bg-blue-100" />
-                {step == 1 ? <FormContainer onHandleInputChange={onHandleInputChange}
+                {step === 1 ? <FormContainer onHandleInputChange={onHandleInputChange}
                     GoToNext={() => onGoToNextStep()}
                 />
-                    : step == 2 ? <QuestionList formData={formData}   onCreateLink={(interview_id)=>onCreateLink(interview_id)}> : 
-                    step == 3 ? <InterviewLink interview_id /> : null}
+                    : step === 2 ? <QuestionList
+                        formData={formData}
+                        onCreateLink={(interview_id) => onCreateLink(interview_id)}
+                    /> :
+                    step === 3 ? <InterviewLink interview_id={interview_id}
+                    formData={formData}
+                    /> : null}
 
             </div>
         )
