@@ -14,7 +14,7 @@ import InterviewLink from './_components/InterviewLink';
 function CreateInterview() {
 
     const router = useRouter();
-    const [step, setStep] = useState(3); //for testing purpose, set step to 3 to directly show the InterviewLink component````````
+    const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({})
     const [interview_id, setInterviewId] = useState();
     
@@ -46,7 +46,7 @@ function CreateInterview() {
     }
     const onCreateLink = (interview_id) => {
         setInterviewId(interview_id);
-        setStep(step + 1);
+        setStep(3);
     }
 
 

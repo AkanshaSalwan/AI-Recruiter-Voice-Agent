@@ -114,8 +114,8 @@ function QuestionList({ formData, onCreateLink }) {
 
   const onFinish = async () => {
     setSaveLoading(true);
+    const interviewId = uuidv4();
     try {
-      const interview_id=uuidv4();
       const { data, error } = await supabase
         .from('interviews')
         .insert([
@@ -126,7 +126,7 @@ function QuestionList({ formData, onCreateLink }) {
             type: Array.isArray(formData.types) ? formData.types.join(',') : formData.types,
             questionList: questionList,
             userEmail: user?.email,
-            interview_id: interview_id,
+            interview_id: interviewId,
           },
         ])
         .select();
@@ -143,10 +143,9 @@ function QuestionList({ formData, onCreateLink }) {
       toast.add({
         title: "Interview created successfully",
       });
+      onCreateLink(interviewId);
     } finally {
       setSaveLoading(false);
-
-      onCreateLink(interview_id);
     }
   }
 
