@@ -1,10 +1,56 @@
-import React from 'react'
+'use client'
+import React, { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
+import { useParams } from 'next/navigation'
 import { Building2, Clock, Info, Settings, Video } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { createClient } from '@/services/supabaseClient'
 
 function Interview() {
+    const { interview_id } = useParams();
+    const supabase = useMemo(() => createClient(), []);
+    const [interviewData, setInterviewData] = useState(null);
+    const [userName, setUserName] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+
+    useEffect(() => {
+        if (!interview_id) {
+            setLoadError('Interview ID is missing.');
+            setIsLoading(false);
+            return;
+        }
+
+        const getInterviewDetails = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('interviews')
+                    .select('jobPosition, jobDescription, duration, type')
+                    .eq('interview_id', interview_id)
+                    .maybeSingle();
+
+                if (error) {
+                    throw error;
+                }
+
+                if (!data) {
+                    setLoadError('Interview not found.');
+                    return;
+                }
+
+                setInterviewData(data);
+            } catch (error) {
+                console.error('Unable to load interview details:', error);
+                setLoadError('Unable to load interview details. Please try again.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        getInterviewDetails();
+    }, [interview_id, supabase]);
+
     return (
         <main className='min-h-screen bg-slate-50 px-4 py-8 sm:py-12'>
             <section className='mx-auto w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm'>
@@ -30,18 +76,16 @@ function Interview() {
 
                 <header className='text-center'>
                     <h1 className='text-xl font-bold tracking-tight text-slate-900'>
-                        Full Stack Developer Interview
+                        {isLoading ? 'Loading interview...' : loadError || interviewData?.jobPosition}
                     </h1>
-                    <div className='mt-3 flex items-center justify-center gap-5 text-sm text-slate-500'>
-                        <span className='flex items-center gap-1.5'>
-                            <Building2 className='h-4 w-4' />
-                            Google Inc.
-                        </span>
-                        <span className='flex items-center gap-1.5'>
-                            <Clock className='h-4 w-4' />
-                            30 Minutes
-                        </span>
-                    </div>
+                    {interviewData?.duration && (
+                        <div className='mt-3 flex items-center justify-center gap-5 text-sm text-slate-500'>
+                            <span className='flex items-center gap-1.5'>
+                                <Clock className='h-4 w-4' />
+                                {interviewData.duration} Minutes
+                            </span>
+                        </div>
+                    )}
                 </header>
 
                 <div className='mt-6'>
@@ -51,6 +95,7 @@ function Interview() {
                     <Input
                         id='candidate-name'
                         placeholder='e.g., John Smith'
+                        onChange={(event) => setUserName(event.target.value)}
                         className='h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0'
                     />
                 </div>
@@ -68,14 +113,14 @@ function Interview() {
                 </div>
 
                 <div className='mt-4 space-y-2'>
-                    <Button className='h-9 w-full'>
+                    <Button
+                        className='h-9 w-full'
+                        disabled={isLoading || Boolean(loadError) || !userName.trim()}
+                    >
                         <Video />
                         Join Interview
                     </Button>
-                    <Button variant='outline' className='h-9 w-full'>
-                        <Settings />
-                        Test Audio &amp; Video
-                    </Button>
+                   
                 </div>
             </section>
         </main>

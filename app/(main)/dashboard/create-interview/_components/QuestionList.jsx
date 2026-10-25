@@ -5,7 +5,6 @@ import { toast } from '@/components/ui/toast';
 import { Loader2, Loader2Icon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import QuestionListContainer from './QuestionListContainer';
-import {supabase} from '@/services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@/services/supabaseClient';
 import { useUser } from '@/app/provider';
