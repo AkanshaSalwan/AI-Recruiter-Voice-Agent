@@ -1,11 +1,13 @@
 'use client'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useContext, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { useParams } from 'next/navigation'
-import { Building2, Clock, Info, Settings, Video } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
+import { Building2, Clock, Info, Loader2Icon, Settings, Video } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { InterviewDataContext } from '@/context/InterviewDataContext'
 import { createClient } from '@/services/supabaseClient'
+
 
 
 function Interview() {
@@ -15,6 +17,10 @@ function Interview() {
     const [userName, setUserName] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [joinError, setJoinError] = useState('');
+    const {interviewInfo,setInterviewInfo}=useContext(InterviewDataContext);
+    const router=useRouter();
+    const [loading,setLoading]=useState(false);
 
     useEffect(() => {
         if (!interview_id) {
@@ -52,13 +58,34 @@ function Interview() {
         getInterviewDetails();
     }, [interview_id, supabase]);
 
-    const onJoinInterview= async()=>{
-        let {data: Interviews, error}= await supabase
-        .from('Interviews')
-        .select('*')
-        .eq('interview_id', interview_id)
+    const onJoinInterview = async () => {
+        setLoading(true);
+        setJoinError('');
 
-        console.log(Interviews[0]);
+        try {
+            const { data, error } = await supabase
+                .from('interviews')
+                .select('*')
+                .eq('interview_id', interview_id)
+                .maybeSingle();
+
+            if (error) {
+                throw error;
+            }
+
+            if (!data) {
+                setJoinError('Interview not found. Please check the interview link.');
+                return;
+            }
+
+            setInterviewInfo(data);
+            router.push(`/interview/${interview_id}/start`);
+        } catch (error) {
+            console.error('Unable to join interview:', error);
+            setJoinError('Unable to join the interview. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     }
 
     return (
@@ -125,13 +152,17 @@ function Interview() {
                 <div className='mt-4 space-y-2'>
                     <Button
                         className='h-9 w-full'
-                        disabled={isLoading || Boolean(loadError) || !userName.trim()}
-                        onClick={()=>onJoinInterview()}
+                        disabled={isLoading || loading || Boolean(loadError) || !userName.trim()}
+                        onClick={onJoinInterview}
                     >
-                        <Video />
+                        <Video /> {loading && <Loader2Icon/>}
                         Join Interview
                     </Button>
-                   
+                    {joinError && (
+                        <p role='alert' className='text-sm text-red-600'>
+                            {joinError}
+                        </p>
+                    )}
                 </div>
             </section>
         </main>
