@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { InterviewDataContext } from '@/context/InterviewDataContext'
 import { createClient } from '@/services/supabaseClient'
+import QuestionList from '@/app/(main)/dashboard/create-interview/_components/QuestionList'
 
 
 
@@ -18,9 +19,9 @@ function Interview() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [joinError, setJoinError] = useState('');
-    const {interviewInfo,setInterviewInfo}=useContext(InterviewDataContext);
-    const router=useRouter();
-    const [loading,setLoading]=useState(false);
+    const { interviewInfo, setInterviewInfo } = useContext(InterviewDataContext);
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (!interview_id) {
@@ -78,7 +79,10 @@ function Interview() {
                 return;
             }
 
-            setInterviewInfo(data);
+            setInterviewInfo({
+                userName: userName.trim(),
+                interviewData: Interview[0]
+            });
             router.push(`/interview/${interview_id}/start`);
         } catch (error) {
             console.error('Unable to join interview:', error);
@@ -155,7 +159,7 @@ function Interview() {
                         disabled={isLoading || loading || Boolean(loadError) || !userName.trim()}
                         onClick={onJoinInterview}
                     >
-                        <Video /> {loading && <Loader2Icon/>}
+                        <Video /> {loading && <Loader2Icon />}
                         Join Interview
                     </Button>
                     {joinError && (
