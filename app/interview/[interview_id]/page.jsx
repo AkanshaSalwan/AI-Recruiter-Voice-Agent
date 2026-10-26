@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/services/supabaseClient'
 
+
 function Interview() {
     const { interview_id } = useParams();
     const supabase = useMemo(() => createClient(), []);
@@ -50,6 +51,15 @@ function Interview() {
 
         getInterviewDetails();
     }, [interview_id, supabase]);
+
+    const onJoinInterview= async()=>{
+        let {data: Interviews, error}= await supabase
+        .from('Interviews')
+        .select('*')
+        .eq('interview_id', interview_id)
+
+        console.log(Interviews[0]);
+    }
 
     return (
         <main className='min-h-screen bg-slate-50 px-4 py-8 sm:py-12'>
@@ -116,6 +126,7 @@ function Interview() {
                     <Button
                         className='h-9 w-full'
                         disabled={isLoading || Boolean(loadError) || !userName.trim()}
+                        onClick={()=>onJoinInterview()}
                     >
                         <Video />
                         Join Interview
