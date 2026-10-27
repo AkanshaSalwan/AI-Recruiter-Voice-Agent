@@ -81,7 +81,7 @@ function Interview() {
 
             setInterviewInfo({
                 userName: userName.trim(),
-                interviewData: Interview[0]
+                interviewData: data
             });
             router.push(`/interview/${interview_id}/start`);
         } catch (error) {
