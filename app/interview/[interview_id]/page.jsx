@@ -16,6 +16,7 @@ function Interview() {
     const supabase = useMemo(() => createClient(), []);
     const [interviewData, setInterviewData] = useState(null);
     const [userName, setUserName] = useState('');
+    const [userEmail, setUserEmail] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [joinError, setJoinError] = useState('');
@@ -81,6 +82,7 @@ function Interview() {
 
             setInterviewInfo({
                 userName: userName.trim(),
+                userEmail: userEmail.trim(),
                 interviewData: data
             });
             router.push(`/interview/${interview_id}/start`);
@@ -140,6 +142,17 @@ function Interview() {
                         className='h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0'
                     />
                 </div>
+                 <div className='mt-6'>
+                    <label htmlFor='candidate-email' className='mb-2 block text-sm font-medium text-slate-900'>
+                        Enter your Email
+                    </label>
+                    <Input
+                        id='candidate-email'
+                        placeholder='e.g., John Smith@gmail.com'
+                        onChange={(event) => setUserEmail(event.target.value)}
+                        className='h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:ring-0 focus-visible:ring-offset-0'
+                    />
+                </div>
 
                 <div className='mt-4 flex items-start gap-2.5 rounded-md border border-blue-100 bg-blue-50 p-3'>
                     <Info className='mt-0.5 h-4 w-4 shrink-0 text-blue-600' />
@@ -156,7 +169,13 @@ function Interview() {
                 <div className='mt-4 space-y-2'>
                     <Button
                         className='h-9 w-full'
-                        disabled={isLoading || loading || Boolean(loadError) || !userName.trim()}
+                        disabled={
+                            isLoading ||
+                            loading ||
+                            Boolean(loadError) ||
+                            !userName.trim() ||
+                            !userEmail.trim()
+                        }
                         onClick={onJoinInterview}
                     >
                         <Video /> {loading && <Loader2Icon />}

@@ -50,14 +50,28 @@ function isDailyConsoleNoise(args) {
   return DAILY_NOISE_PATTERNS.some((pattern) => text.includes(pattern))
 }
 
+function formatDuration(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  return [hours, minutes, seconds]
+    .map((unit) => String(unit).padStart(2, '0'))
+    .join(':')
+}
+
 function StartInterview() {
   const { interviewInfo } = useContext(InterviewDataContext)
   const vapiRef = useRef(null)
   const callActiveRef = useRef(false)
+  const timerIntervalRef = useRef(null)
+  const timerStartedAtRef = useRef(null)
   const [callActive, setCallActive] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [statusText, setStatusText] = useState('Ready to begin')
-  const[activeUser, setActiveUser] = useState(false)
+  const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false)
+  const [isCandidateSpeaking, setIsCandidateSpeaking] = useState(false)
 
 
   if (!vapiRef.current && process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY) {
@@ -71,6 +85,7 @@ function StartInterview() {
       originalError.apply(console, args)
     }
 
+
     return () => {
       console.error = originalError
     }
@@ -82,18 +97,34 @@ function StartInterview() {
 
     const onCallStart = () => {
       callActiveRef.current = true
+      timerStartedAtRef.current = Date.now()
+      setElapsedSeconds(0)
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = setInterval(() => {
+        const startedAt = timerStartedAtRef.current
+        if (startedAt) {
+          setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
+        }
+      }, 1000)
       setCallActive(true)
       setIsStarting(false)
       setStatusText('Interview in Progress....')
+      toast.add({ title: 'Call has started.' })
     }
 
     const onCallEnd = () => {
       callActiveRef.current = false
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = null
+      timerStartedAtRef.current = null
       setCallActive(false)
       setIsStarting(false)
+      setIsAssistantSpeaking(false)
+      setIsCandidateSpeaking(false)
       setStatusText((current) =>
         current.startsWith('Ended:') ? current : 'Interview ended'
       )
+      toast.add({ title: 'Call has ended.' })
     }
 
     const onMessage = (message) => {
@@ -110,16 +141,35 @@ function StartInterview() {
       setStatusText('Unable to start interview. Please try again.')
     }
 
+    const onSpeechStart = () => {
+      setIsAssistantSpeaking(true)
+    }
+
+    const onSpeechEnd = () => {
+      setIsAssistantSpeaking(false)
+    }
+
+    const onLocalVolumeLevel = (volume) => {
+      setIsCandidateSpeaking(volume > 0.02)
+    }
+
     vapi.on('call-start', onCallStart)
     vapi.on('call-end', onCallEnd)
     vapi.on('message', onMessage)
     vapi.on('error', onError)
+    vapi.on('speech-start', onSpeechStart)
+    vapi.on('speech-end', onSpeechEnd)
+    vapi.on('local-volume-level', onLocalVolumeLevel)
 
     return () => {
+      clearInterval(timerIntervalRef.current)
       vapi.removeListener('call-start', onCallStart)
       vapi.removeListener('call-end', onCallEnd)
       vapi.removeListener('message', onMessage)
       vapi.removeListener('error', onError)
+      vapi.removeListener('speech-start', onSpeechStart)
+      vapi.removeListener('speech-end', onSpeechEnd)
+      vapi.removeListener('local-volume-level', onLocalVolumeLevel)
       // Do not call vapi.stop() here — Strict Mode remounts would eject the meeting.
     }
   }, [])
@@ -210,28 +260,15 @@ Key Guidelines:
       // ignore — meeting may already be ended
     }
     callActiveRef.current = false
+    clearInterval(timerIntervalRef.current)
+    timerIntervalRef.current = null
+    timerStartedAtRef.current = null
     setCallActive(false)
     setIsStarting(false)
+    setIsAssistantSpeaking(false)
+    setIsCandidateSpeaking(false)
     setStatusText('Interview ended')
   }
-
-  vapi.on("call-start", () =>{
-    console.log("Call has started.");
-    toast.success("Call has started.");
-  });
-  vapi.on("call-end", () =>{
-    console.log("Call has ended.");
-    toast.success("Call has ended.");
-  });
-
-  vapi.on("speech-start", () =>{
-    console.log("Assistant speech has started.");
-    setActiveUser(false);
-  });
-  vapi.on("speech-end", () =>{
-    console.log("Assistant speech has ended.");
-    setActiveUser(true);
-  });
 
   return (
     <div className='p-20 lg:px-48 xl:px-56 bg-gray-200'>
@@ -239,14 +276,14 @@ Key Guidelines:
         AI Interview Session
         <span className='flex gap-2 item-center'>
           <Timer />
-          00:00:00
+          {formatDuration(elapsedSeconds)}
         </span>
       </h2>
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-7 mt-5'>
         <div className='bg-white h-[400px] rounded-lg border flex flex-col gap-3 flex items-center justify-center'>
          <div className='relative'>
-         {!activeUser && <span className='absolute inset-0 rounded-full bg-blue-500 opacity-70 animate-ping' />}
+         {isAssistantSpeaking && <span className='absolute inset-0 rounded-full bg-blue-500 opacity-70 animate-ping' />}
          <Image src={'/ai.png'} alt='ai'
             width={100}
             height={100}
@@ -256,7 +293,10 @@ Key Guidelines:
           <h2>AI Recruiter</h2>
         </div>
         <div className='bg-white h-[400px] rounded-lg border flex flex-col gap-3 items-center justify-center'>
-          <h2 className='text-2xl bg-primary text-white p-3 rounded-full px-6'>{interviewInfo?.userName?.[0]}</h2>
+          <div className='relative'>
+            {isCandidateSpeaking && <span className='absolute inset-0 rounded-full bg-green-500 opacity-70 animate-ping' />}
+            <h2 className='text-2xl bg-primary text-white p-3 rounded-full px-6'>{interviewInfo?.userName?.[0]}</h2>
+          </div>
           <h2>{interviewInfo?.userName}</h2>
         </div>
       </div>
