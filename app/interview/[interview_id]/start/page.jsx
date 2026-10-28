@@ -1,4 +1,3 @@
-
 'use client'
 import { InterviewDataContext } from '@/context/InterviewDataContext'
 import React, { useContext, useEffect, useRef, useState } from 'react'
@@ -7,6 +6,8 @@ import Image from 'next/image'
 import Vapi from '@vapi-ai/web';
 import AlertConfirmation from './_components/AlertConfirmation'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/toast'
+
 
 const DAILY_NOISE_PATTERNS = [
   'unsupported input processor',
@@ -56,6 +57,8 @@ function StartInterview() {
   const [callActive, setCallActive] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
   const [statusText, setStatusText] = useState('Ready to begin')
+  const[activeUser, setActiveUser] = useState(false)
+
 
   if (!vapiRef.current && process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY) {
     vapiRef.current = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY)
@@ -212,6 +215,24 @@ Key Guidelines:
     setStatusText('Interview ended')
   }
 
+  vapi.on("call-start", () =>{
+    console.log("Call has started.");
+    toast.success("Call has started.");
+  });
+  vapi.on("call-end", () =>{
+    console.log("Call has ended.");
+    toast.success("Call has ended.");
+  });
+
+  vapi.on("speech-start", () =>{
+    console.log("Assistant speech has started.");
+    setActiveUser(false);
+  });
+  vapi.on("speech-end", () =>{
+    console.log("Assistant speech has ended.");
+    setActiveUser(true);
+  });
+
   return (
     <div className='p-20 lg:px-48 xl:px-56 bg-gray-200'>
       <h2 className='font-bold text-xl flex justify-between'>
@@ -224,11 +245,14 @@ Key Guidelines:
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-7 mt-5'>
         <div className='bg-white h-[400px] rounded-lg border flex flex-col gap-3 flex items-center justify-center'>
-          <Image src={'/ai.png'} alt='ai'
+         <div className='relative'>
+         {!activeUser && <span className='absolute inset-0 rounded-full bg-blue-500 opacity-70 animate-ping' />}
+         <Image src={'/ai.png'} alt='ai'
             width={100}
             height={100}
             className='w-[60px] h-[60px] rounded-full object-cover'
           />
+         </div>
           <h2>AI Recruiter</h2>
         </div>
         <div className='bg-white h-[400px] rounded-lg border flex flex-col gap-3 items-center justify-center'>
