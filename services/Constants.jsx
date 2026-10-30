@@ -74,3 +74,26 @@ type must be one of: Technical, Behavioral, Experience, Problem Solving, Leaders
 
 🎯 The goal is to create a structured, relevant, and time-optimized interview plan for a {{jobTitle}} role.`;
 
+export const FEEDBACK_PROMPT = `Based on the following interview conversation between the assistant and the user, provide feedback for the user's interview:
+
+Interview Conversation:
+{{conversation}}
+
+Rate the user out of 10 for technical skills, communication, problem solving, and experience.
+Also provide a summary in 3 lines and state whether the user is recommended for hire,
+including a message explaining the recommendation.
+
+Return ONLY valid JSON, with this exact structure:
+{
+  "feedback": {
+    "rating": {
+      "technicalSkills": 5,
+      "communication": 6,
+      "problemSolving": 4,
+      "experience": 7
+    },
+    "summary": "Three-line summary of the interview.",
+    "recommendation": "Recommended",
+    "recommendationMessage": "Explanation of the recommendation."
+  }
+}`;

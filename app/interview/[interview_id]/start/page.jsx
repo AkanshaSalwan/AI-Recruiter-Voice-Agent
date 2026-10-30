@@ -1,12 +1,15 @@
 'use client'
 import { InterviewDataContext } from '@/context/InterviewDataContext'
-import React, { useContext, useEffect, useRef, useState } from 'react'
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Timer, Mic, Phone } from 'lucide-react'
 import Image from 'next/image'
 import Vapi from '@vapi-ai/web';
 import AlertConfirmation from './_components/AlertConfirmation'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
+import axios from 'axios'
+import { useParams } from 'next/navigation'
+import { createClient } from '@/services/supabaseClient'
 
 
 const DAILY_NOISE_PATTERNS = [
@@ -62,8 +65,13 @@ function formatDuration(totalSeconds) {
 
 function StartInterview() {
   const { interviewInfo } = useContext(InterviewDataContext)
+  const { interview_id: interviewId } = useParams()
+  const supabase = useMemo(() => createClient(), [])
   const vapiRef = useRef(null)
+  const interviewInfoRef = useRef(interviewInfo)
   const callActiveRef = useRef(false)
+  const conversationRef = useRef([])
+  const feedbackInProgressRef = useRef(false)
   const timerIntervalRef = useRef(null)
   const timerStartedAtRef = useRef(null)
   const [callActive, setCallActive] = useState(false)
@@ -72,6 +80,9 @@ function StartInterview() {
   const [statusText, setStatusText] = useState('Ready to begin')
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false)
   const [isCandidateSpeaking, setIsCandidateSpeaking] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+
+  interviewInfoRef.current = interviewInfo
 
 
   if (!vapiRef.current && process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY) {
@@ -97,6 +108,9 @@ function StartInterview() {
 
     const onCallStart = () => {
       callActiveRef.current = true
+      conversationRef.current = []
+      feedbackInProgressRef.current = false
+      setFeedback(null)
       timerStartedAtRef.current = Date.now()
       setElapsedSeconds(0)
       clearInterval(timerIntervalRef.current)
@@ -113,6 +127,9 @@ function StartInterview() {
     }
 
     const onCallEnd = () => {
+      window.setTimeout(() => {
+        void generateFeedback()
+      }, 1000)
       callActiveRef.current = false
       clearInterval(timerIntervalRef.current)
       timerIntervalRef.current = null
@@ -128,6 +145,24 @@ function StartInterview() {
     }
 
     const onMessage = (message) => {
+      if (
+        message?.type === 'transcript' &&
+        message?.role &&
+        message?.transcript &&
+        (!message.transcriptType || message.transcriptType === 'final')
+      ) {
+        conversationRef.current.push({
+          role: message.role,
+          content: message.transcript,
+        })
+      }
+
+      if (message?.type === 'conversation-update' && Array.isArray(message.conversation)) {
+        conversationRef.current = message.conversation
+          .filter((item) => item?.role && item?.content)
+          .map((item) => ({ role: item.role, content: item.content }))
+      }
+
       if (message?.type === 'status-update' && message?.status === 'ended') {
         const reason = message?.endedReason || 'unknown'
         setStatusText(`Ended: ${reason}`)
@@ -270,6 +305,87 @@ Key Guidelines:
     setStatusText('Interview ended')
   }
 
+  const generateFeedback = async () => {
+    if (feedbackInProgressRef.current) return
+    if (!conversationRef.current.length) {
+      console.error('Unable to generate interview feedback: no transcript was received')
+      setStatusText('Interview ended, but no conversation was captured.')
+      return
+    }
+
+    feedbackInProgressRef.current = true
+    setStatusText('Generating interview feedback...')
+
+    try {
+      const conversation = conversationRef.current
+      const result = await axios.post('/api/ai-feedback', { conversation })
+      const content = result.data?.content
+      if (!content) throw new Error(result.data?.error || 'Empty feedback response')
+
+      const cleanedContent = content
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim()
+      let generatedFeedback
+
+      try {
+        generatedFeedback = JSON.parse(cleanedContent)
+      } catch {
+        const objectMatch = cleanedContent.match(/\{[\s\S]*\}/)
+        if (!objectMatch) {
+          throw new Error('AI did not return valid JSON feedback.')
+        }
+
+        try {
+          generatedFeedback = JSON.parse(objectMatch[0])
+        } catch {
+          throw new Error('AI returned malformed JSON feedback.')
+        }
+      }
+
+      const feedbackData = generatedFeedback.feedback || generatedFeedback
+      if (!feedbackData || typeof feedbackData !== 'object') {
+        throw new Error('AI returned an invalid feedback structure.')
+      }
+
+      const currentInterviewInfo = interviewInfoRef.current
+      const { data: feedbackRecord, error: feedbackRecordError } = await supabase
+        .from('interview-feedback')
+        .insert([{
+          userName: currentInterviewInfo?.userName,
+          userEmail: currentInterviewInfo?.userEmail,
+          interview_id: interviewId,
+          feedback: feedbackData,
+          recommonded: feedbackData.recommendation === 'Recommended',
+        }])
+        .select()
+
+      if (feedbackRecordError) throw feedbackRecordError
+      console.log('Saved interview feedback:', feedbackRecord)
+
+      const { error: conversationError } = await supabase
+        .from('interviews')
+        .update({ conversation, feedback: feedbackData })
+        .eq('interview_id', interviewId)
+
+      if (conversationError) {
+        console.error('Interview feedback saved, but interview update failed:', conversationError)
+      }
+
+      setFeedback(feedbackData)
+      setStatusText('Interview feedback is ready')
+      toast.add({ title: 'Interview feedback generated.' })
+    } catch (error) {
+      console.error('Unable to generate interview feedback:', error)
+      setStatusText('Interview ended, but feedback could not be generated.')
+      toast.add({
+        title: error?.response?.data?.error || error?.message || 'Unable to generate feedback.',
+      })
+    } finally {
+      feedbackInProgressRef.current = false
+    }
+  }
+
   return (
     <div className='p-20 lg:px-48 xl:px-56 bg-gray-200'>
       <h2 className='font-bold text-xl flex justify-between'>
@@ -282,14 +398,14 @@ Key Guidelines:
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-7 mt-5'>
         <div className='bg-white h-[400px] rounded-lg border flex flex-col gap-3 flex items-center justify-center'>
-         <div className='relative'>
-         {isAssistantSpeaking && <span className='absolute inset-0 rounded-full bg-blue-500 opacity-70 animate-ping' />}
-         <Image src={'/ai.png'} alt='ai'
-            width={100}
-            height={100}
-            className='w-[60px] h-[60px] rounded-full object-cover'
-          />
-         </div>
+          <div className='relative'>
+            {isAssistantSpeaking && <span className='absolute inset-0 rounded-full bg-blue-500 opacity-70 animate-ping' />}
+            <Image src={'/ai.png'} alt='ai'
+              width={100}
+              height={100}
+              className='w-[60px] h-[60px] rounded-full object-cover'
+            />
+          </div>
           <h2>AI Recruiter</h2>
         </div>
         <div className='bg-white h-[400px] rounded-lg border flex flex-col gap-3 items-center justify-center'>
@@ -319,6 +435,12 @@ Key Guidelines:
       )}
 
       <h2 className='text-sm text-gray-400 text-center mt-5'>{statusText}</h2>
+      {feedback?.summary && (
+        <div className='mx-auto mt-5 max-w-2xl rounded-lg border bg-white p-4'>
+          <h3 className='font-semibold'>Interview Feedback</h3>
+          <p className='mt-2 whitespace-pre-line text-sm text-gray-600'>{feedback.summary}</p>
+        </div>
+      )}
     </div>
   )
 }
