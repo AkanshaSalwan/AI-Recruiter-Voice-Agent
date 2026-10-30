@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { FEEDBACK_PROMPT } from "@/services/Constants";
 
 const FREE_MODELS = [
@@ -30,7 +31,7 @@ function parseJsonContent(content) {
 
 export async function POST(request) {
     try {
-        const { conversation } = await request.json();
+        const { conversation, interview_id, userName, userEmail } = await request.json();
 
         if (!Array.isArray(conversation) || conversation.length === 0) {
             return NextResponse.json(
@@ -81,6 +82,41 @@ export async function POST(request) {
                 if (!parsed?.feedback) {
                     lastError = new Error("AI returned invalid feedback JSON");
                     continue;
+                }
+
+                const feedbackData = parsed.feedback;
+                const recommendationText = String(feedbackData.recommendation || "");
+                const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+                if (interview_id && supabaseUrl && supabaseKey) {
+                    const supabase = createClient(supabaseUrl, supabaseKey);
+                    const { data: feedbackRecord, error: feedbackRecordError } = await supabase
+                        .from("interview feedback")
+                        .insert([{
+                            userName: userName || null,
+                            userEmail: userEmail || null,
+                            interview_id,
+                            feedback: feedbackData,
+                            recommended: recommendationText.toLowerCase() === "recommended",
+                        }])
+                        .select();
+
+                    if (feedbackRecordError) {
+                        console.error("Unable to save interview feedback:", feedbackRecordError);
+                        return NextResponse.json(
+                            {
+                                content: JSON.stringify(parsed),
+                                error: feedbackRecordError.message,
+                            },
+                            { status: 502 }
+                        );
+                    }
+
+                    return NextResponse.json({
+                        content: JSON.stringify(parsed),
+                        saved: feedbackRecord,
+                    });
                 }
 
                 return NextResponse.json({ content: JSON.stringify(parsed) });

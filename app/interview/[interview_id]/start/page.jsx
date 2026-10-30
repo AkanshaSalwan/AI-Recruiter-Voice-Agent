@@ -1,6 +1,6 @@
 'use client'
 import { InterviewDataContext } from '@/context/InterviewDataContext'
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Timer, Mic, Phone } from 'lucide-react'
 import Image from 'next/image'
 import Vapi from '@vapi-ai/web';
@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import axios from 'axios'
 import { useParams } from 'next/navigation'
-import { createClient } from '@/services/supabaseClient'
 
 
 const DAILY_NOISE_PATTERNS = [
@@ -53,6 +52,43 @@ function isDailyConsoleNoise(args) {
   return DAILY_NOISE_PATTERNS.some((pattern) => text.includes(pattern))
 }
 
+function getMessageText(item) {
+  if (!item) return ''
+  if (typeof item.content === 'string') return item.content
+  if (typeof item.message === 'string') return item.message
+  if (typeof item.transcript === 'string') return item.transcript
+  return ''
+}
+
+function normalizeConversation(items) {
+  if (!Array.isArray(items)) return []
+
+  return items
+    .map((item) => {
+      const content = getMessageText(item).trim()
+      const rawRole = String(item?.role || '').toLowerCase()
+      if (!content || !rawRole || rawRole === 'system' || rawRole === 'tool' || rawRole === 'function') {
+        return null
+      }
+
+      return {
+        role: rawRole === 'bot' || rawRole === 'assistant' ? 'assistant' : 'user',
+        content,
+      }
+    })
+    .filter(Boolean)
+}
+
+function conversationFromVapiMessage(message) {
+  if (message?.type !== 'conversation-update') return null
+
+  const fromOpenAI = normalizeConversation(message.messagesOpenAIFormatted)
+  if (fromOpenAI.length) return fromOpenAI
+
+  const fromMessages = normalizeConversation(message.messages || message.conversation)
+  return fromMessages.length ? fromMessages : null
+}
+
 function formatDuration(totalSeconds) {
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
@@ -66,12 +102,13 @@ function formatDuration(totalSeconds) {
 function StartInterview() {
   const { interviewInfo } = useContext(InterviewDataContext)
   const { interview_id: interviewId } = useParams()
-  const supabase = useMemo(() => createClient(), [])
   const vapiRef = useRef(null)
   const interviewInfoRef = useRef(interviewInfo)
   const callActiveRef = useRef(false)
   const conversationRef = useRef([])
   const feedbackInProgressRef = useRef(false)
+  const feedbackSavedRef = useRef(false)
+  const generateFeedbackRef = useRef(async () => {})
   const timerIntervalRef = useRef(null)
   const timerStartedAtRef = useRef(null)
   const [callActive, setCallActive] = useState(false)
@@ -110,6 +147,7 @@ function StartInterview() {
       callActiveRef.current = true
       conversationRef.current = []
       feedbackInProgressRef.current = false
+      feedbackSavedRef.current = false
       setFeedback(null)
       timerStartedAtRef.current = Date.now()
       setElapsedSeconds(0)
@@ -128,8 +166,8 @@ function StartInterview() {
 
     const onCallEnd = () => {
       window.setTimeout(() => {
-        void generateFeedback()
-      }, 1000)
+        void generateFeedbackRef.current()
+      }, 1500)
       callActiveRef.current = false
       clearInterval(timerIntervalRef.current)
       timerIntervalRef.current = null
@@ -152,15 +190,14 @@ function StartInterview() {
         (!message.transcriptType || message.transcriptType === 'final')
       ) {
         conversationRef.current.push({
-          role: message.role,
+          role: message.role === 'bot' ? 'assistant' : message.role,
           content: message.transcript,
         })
       }
 
-      if (message?.type === 'conversation-update' && Array.isArray(message.conversation)) {
-        conversationRef.current = message.conversation
-          .filter((item) => item?.role && item?.content)
-          .map((item) => ({ role: item.role, content: item.content }))
+      const updatedConversation = conversationFromVapiMessage(message)
+      if (updatedConversation) {
+        conversationRef.current = updatedConversation
       }
 
       if (message?.type === 'status-update' && message?.status === 'ended') {
@@ -303,22 +340,35 @@ Key Guidelines:
     setIsAssistantSpeaking(false)
     setIsCandidateSpeaking(false)
     setStatusText('Interview ended')
+    window.setTimeout(() => {
+      void generateFeedbackRef.current()
+    }, 1500)
   }
 
   const generateFeedback = async () => {
-    if (feedbackInProgressRef.current) return
-    if (!conversationRef.current.length) {
-      console.error('Unable to generate interview feedback: no transcript was received')
-      setStatusText('Interview ended, but no conversation was captured.')
-      return
-    }
+    if (feedbackInProgressRef.current || feedbackSavedRef.current) return
 
     feedbackInProgressRef.current = true
     setStatusText('Generating interview feedback...')
 
     try {
-      const conversation = conversationRef.current
-      const result = await axios.post('/api/ai-feedback', { conversation })
+      let conversation = normalizeConversation(conversationRef.current)
+      for (let attempt = 0; attempt < 6 && conversation.length === 0; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500))
+        conversation = normalizeConversation(conversationRef.current)
+      }
+
+      if (!conversation.length) {
+        throw new Error('No interview transcript was captured.')
+      }
+
+      const currentInterviewInfo = interviewInfoRef.current
+      const result = await axios.post('/api/ai-feedback', {
+        conversation,
+        interview_id: interviewId,
+        userName: currentInterviewInfo?.userName,
+        userEmail: currentInterviewInfo?.userEmail,
+      })
       const content = result.data?.content
       if (!content) throw new Error(result.data?.error || 'Empty feedback response')
 
@@ -348,29 +398,12 @@ Key Guidelines:
         throw new Error('AI returned an invalid feedback structure.')
       }
 
-      const currentInterviewInfo = interviewInfoRef.current
-      const { data: feedbackRecord, error: feedbackRecordError } = await supabase
-        .from('interview-feedback')
-        .insert([{
-          userName: currentInterviewInfo?.userName,
-          userEmail: currentInterviewInfo?.userEmail,
-          interview_id: interviewId,
-          feedback: feedbackData,
-          recommonded: feedbackData.recommendation === 'Recommended',
-        }])
-        .select()
-
-      if (feedbackRecordError) throw feedbackRecordError
-      console.log('Saved interview feedback:', feedbackRecord)
-
-      const { error: conversationError } = await supabase
-        .from('interviews')
-        .update({ conversation, feedback: feedbackData })
-        .eq('interview_id', interviewId)
-
-      if (conversationError) {
-        console.error('Interview feedback saved, but interview update failed:', conversationError)
+      if (result.data?.error) {
+        throw new Error(result.data.error)
       }
+
+      feedbackSavedRef.current = true
+      console.log('Saved interview feedback:', result.data?.saved)
 
       setFeedback(feedbackData)
       setStatusText('Interview feedback is ready')
@@ -385,6 +418,8 @@ Key Guidelines:
       feedbackInProgressRef.current = false
     }
   }
+
+  generateFeedbackRef.current = generateFeedback
 
   return (
     <div className='p-20 lg:px-48 xl:px-56 bg-gray-200'>
