@@ -14,7 +14,6 @@ function Login() {
       console.error('Error signing in with Google:', error.message);
     }
   };
-
   return (
     <div className={`flex flex-col items-center justify-center h-screen`}>
       <div className={`flex flex-col items-center border rounded-2xl p-8`}>
